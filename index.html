@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gentrification Dynamics Simulator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .cell { width: 28px; height: 28px; cursor: pointer; transition: all 0.3s; border: 1px solid rgba(0,0,0,0.1); }
+  .cell:hover { transform: scale(1.15); z-index: 10; position: relative; }
+  #grid { display: grid; gap: 1px; }
+  .tooltip { position: absolute; background: #1e293b; color: white; padding: 6px 10px; border-radius: 6px; font-size: 11px; pointer-events: none; z-index: 100; white-space: nowrap; }
+</style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+<div class="max-w-6xl mx-auto p-4">
+  <h1 class="text-2xl font-bold text-center mb-1 text-amber-400">Gentrification Dynamics Simulator</h1>
+  <p class="text-center text-gray-400 text-sm mb-4">Watch neighborhoods transform under economic pressure</p>
+
+  <div class="flex flex-wrap gap-4 justify-center mb-4">
+    <!-- Controls -->
+    <div class="bg-gray-800 rounded-xl p-4 w-64">
+      <h2 class="font-semibold text-amber-300 mb-3">Policy Controls</h2>
+      <div class="space-y-3 text-sm">
+        <div>
+          <label class="flex justify-between"><span>Investment Rate</span><span id="inv-val" class="text-amber-400">50%</span></label>
+          <input type="range" id="investment" min="0" max="100" value="50" class="w-full accent-amber-500">
+        </div>
+        <div>
+          <label class="flex justify-between"><span>Transit Access</span><span id="transit-val" class="text-blue-400">50%</span></label>
+          <input type="range" id="transit" min="0" max="100" value="50" class="w-full accent-blue-500">
+        </div>
+        <div>
+          <label class="flex justify-between"><span>Rent Control</span><span id="rent-val" class="text-green-400">30%</span></label>
+          <input type="range" id="rentcontrol" min="0" max="100" value="30" class="w-full accent-green-500">
+        </div>
+        <div>
+          <label class="flex justify-between"><span>Zoning Leniency</span><span id="zone-val" class="text-purple-400">50%</span></label>
+          <input type="range" id="zoning" min="0" max="100" value="50" class="w-full accent-purple-500">
+        </div>
+      </div>
+      <div class="mt-4 space-y-2">
+        <button id="btn-step" class="w-full bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded text-sm font-medium">Step (1 year)</button>
+        <button id="btn-auto" class="w-full bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-sm font-medium">Auto Run</button>
+        <button id="btn-reset" class="w-full bg-gray-600 hover:bg-gray-500 px-3 py-1.5 rounded text-sm font-medium">Reset</button>
+      </div>
+      <div class="mt-3 text-xs text-gray-400">Year: <span id="year-display" class="text-white font-bold">0</span></div>
+    </div>
+
+    <!-- Grid -->
+    <div class="bg-gray-800 rounded-xl p-4">
+      <div id="grid" class="mx-auto"></div>
+      <div id="tooltip" class="tooltip hidden"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="bg-gray-800 rounded-xl p-4 w-56">
+      <h2 class="font-semibold text-amber-300 mb-3">Demographics</h2>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between"><span class="text-gray-400">Low Income</span><span id="stat-low" class="text-red-400 font-bold">-</span></div>
+        <div class="flex justify-between"><span class="text-gray-400">Middle Income</span><span id="stat-mid" class="text-yellow-400 font-bold">-</span></div>
+        <div class="flex justify-between"><span class="text-gray-400">High Income</span><span id="stat-high" class="text-green-400 font-bold">-</span></div>
+        <div class="flex justify-between"><span class="text-gray-400">Vacant</span><span id="stat-vac" class="text-gray-500 font-bold">-</span></div>
+        <hr class="border-gray-600">
+        <div class="flex justify-between"><span class="text-gray-400">Avg Rent</span><span id="stat-rent" class="text-amber-400 font-bold">-</span></div>
+        <div class="flex justify-between"><span class="text-gray-400">Displacement</span><span id="stat-disp" class="text-red-500 font-bold">-</span></div>
+        <div class="flex justify-between"><span class="text-gray-400">Segregation Idx</span><span id="stat-seg" class="text-purple-400 font-bold">-</span></div>
+      </div>
+      <h2 class="font-semibold text-amber-300 mt-4 mb-2">Housing Types</h2>
+      <div class="space-y-1 text-xs">
+        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded" style="background:#6b7280"></div><span>Vacant Lot</span></div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded" style="background:#7c3aed"></div><span>Public Housing</span></div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded" style="background:#b45309"></div><span>Old Residential</span></div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded" style="background:#2563eb"></div><span>New Condo</span></div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded" style="background:#065f46"></div><span>Mixed Use</span></div>
+        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded" style="background:#dc2626"></div><span>Luxury</span></div>
+      </div>
+      <h2 class="font-semibold text-amber-300 mt-4 mb-2">Events</h2>
+      <div id="event-log" class="text-xs text-gray-400 space-y-1 max-h-28 overflow-y-auto"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const GRID_SIZE = 18;
+const TYPES = { VACANT: 0, PUBLIC: 1, OLD: 2, CONDO: 3, MIXED: 4, LUXURY: 5 };
+const INCOME = { NONE: 0, LOW: 1, MID: 2, HIGH: 3 };
+const COLORS = ['#6b7280','#7c3aed','#b45309','#2563eb','#065f46','#dc2626'];
+const BASE_RENT = [0, 400, 800, 1800, 1400, 3500];
+
+let grid = [], year = 0, autoTimer = null, totalDisplaced = 0;
+
+function initGrid() {
+  grid = [];
+  for (let r = 0; r < GRID_SIZE; r++) {
+    grid[r] = [];
+    for (let c = 0; c < GRID_SIZE; c++) {
+      const rand = Math.random();
+      let type, income, rent;
+      if (rand < 0.08) { type = TYPES.VACANT; income = INCOME.NONE; }
+      else if (rand < 0.2) { type = TYPES.PUBLIC; income = INCOME.LOW; }
+      else if (rand < 0.6) { type = TYPES.OLD; income = Math.random() < 0.6 ? INCOME.LOW : INCOME.MID; }
+      else if (rand < 0.75) { type = TYPES.MIXED; income = INCOME.MID; }
+      else if (rand < 0.9) { type = TYPES.CONDO; income = Math.random() < 0.5 ? INCOME.MID : INCOME.HIGH; }
+      else { type = TYPES.LUXURY; income = INCOME.HIGH; }
+      rent = BASE_RENT[type] * (0.8 + Math.random() * 0.4);
+      grid[r][c] = { type, income, rent, age: Math.floor(Math.random() * 20) };
+    }
+  }
+  year = 0; totalDisplaced = 0;
+  renderGrid(); updateStats();
+}
+
+function renderGrid() {
+  const g = document.getElementById('grid');
+  const size = Math.min(28, Math.floor((window.innerWidth - 520) / GRID_SIZE));
+  g.style.gridTemplateColumns = `repeat(${GRID_SIZE}, ${size}px)`;
+  g.innerHTML = '';
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell rounded-sm';
+      const d = grid[r][c];
+      cell.style.background = COLORS[d.type];
+      const incOverlay = ['','rgba(255,0,0,0.25)','rgba(255,255,0,0.15)','rgba(0,255,0,0.2)'][d.income];
+      if (incOverlay) cell.style.boxShadow = `inset 0 0 0 3px ${incOverlay}`;
+      cell.style.width = size + 'px'; cell.style.height = size + 'px';
+      cell.addEventListener('mouseenter', (e) => showTooltip(e, r, c));
+      cell.addEventListener('mouseleave', () => document.getElementById('tooltip').classList.add('hidden'));
+      g.appendChild(cell);
+    }
+  }
+}
+
+function showTooltip(e, r, c) {
+  const d = grid[r][c];
+  const types = ['Vacant','Public Housing','Old Residential','New Condo','Mixed Use','Luxury'];
+  const incomes = ['—','Low Income','Middle Income','High Income'];
+  const tt = document.getElementById('tooltip');
+  tt.innerHTML = `<b>${types[d.type]}</b><br>Income: ${incomes[d.income]}<br>Rent: $${Math.round(d.rent)}/mo<br>Age: ${d.age}yr`;
+  tt.style.left = (e.pageX + 12) + 'px';
+  tt.style.top = (e.pageY - 10) + 'px';
+  tt.classList.remove('hidden');
+}
+
+function getParam(id) { return parseInt(document.getElementById(id).value) / 100; }
+
+function step() {
+  const inv = getParam('investment');
+  const transit = getParam('transit');
+  const rc = getParam('rentcontrol');
+  const zone = getParam('zoning');
+  let displaced = 0;
+  const newGrid = JSON.parse(JSON.stringify(grid));
+
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      const d = newGrid[r][c];
+      d.age++;
+      const neighbors = getNeighbors(r, c);
+      const richNeighbors = neighbors.filter(n => n.income === INCOME.HIGH).length;
+      const avgNeighborRent = neighbors.reduce((s, n) => s + n.rent, 0) / (neighbors.length || 1);
+
+      // Rent pressure
+      const pressure = inv * 0.3 + transit * 0.2 + (richNeighbors / 8) * 0.4;
+      const rentIncrease = pressure * 0.12 * (1 - rc * 0.7);
+      d.rent = Math.min(d.rent * (1 + rentIncrease), 6000);
+
+      // Type transitions
+      if (d.type === TYPES.VACANT && Math.random() < inv * zone * 0.3) {
+        if (Math.random() < 0.3) d.type = TYPES.PUBLIC;
+        else if (Math.random() < 0.5) d.type = TYPES.CONDO;
+        else d.type = TYPES.MIXED;
+        d.income = d.type === TYPES.PUBLIC ? INCOME.LOW : INCOME.MID;
+        d.rent = BASE_RENT[d.type];
+      }
+      if (d.type === TYPES.OLD && d.age > 15 && Math.random() < inv * zone * 0.08) {
+        const luxury = Math.random() < inv * 0.6;
+        d.type = luxury ? TYPES.LUXURY : TYPES.CONDO;
+        d.rent = BASE_RENT[d.type] * (1 + inv * 0.5);
+        if (d.income === INCOME.LOW) { displaced++; d.income = INCOME.HIGH; }
+      }
+      // Income displacement
+      if (d.income === INCOME.LOW && d.rent > 1200 && Math.random() < 0.4 * (1 - rc)) {
+        displaced++; d.income = INCOME.MID;
+        if (d.type === TYPES.OLD && Math.random() < 0.3) d.type = TYPES.CONDO;
+      }
+      if (d.income === INCOME.MID && d.rent > 2500 && Math.random() < 0.3 * (1 - rc * 0.5)) {
+        displaced++; d.income = INCOME.HIGH;
+      }
+      // Rich cluster effect
+      if (richNeighbors >= 4 && d.type === TYPES.OLD && Math.random() < 0.15) {
+        d.type = TYPES.LUXURY; d.rent = BASE_RENT[TYPES.LUXURY]; d.income = INCOME.HIGH;
+      }
+    }
+  }
+  grid = newGrid;
+  totalDisplaced += displaced;
+  year++;
+  if (displaced > 5) addEvent(`Year ${year}: ${displaced} households displaced`);
+  renderGrid(); updateStats();
+}
+
+function getNeighbors(r, c) {
+  const n = [];
+  for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+    if (dr === 0 && dc === 0) continue;
+    const nr = r + dr, nc = c + dc;
+    if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE) n.push(grid[nr][nc]);
+  }
+  return n;
+}
+
+function updateStats() {
+  let low = 0, mid = 0, high = 0, vac = 0, totalRent = 0, rentCount = 0;
+  for (let r = 0; r < GRID_SIZE; r++) for (let c = 0; c < GRID_SIZE; c++) {
+    const d = grid[r][c];
+    if (d.income === INCOME.LOW) low++;
+    else if (d.income === INCOME.MID) mid++;
+    else if (d.income === INCOME.HIGH) high++;
+    else vac++;
+    if (d.rent > 0) { totalRent += d.rent; rentCount++; }
+  }
+  const total = GRID_SIZE * GRID_SIZE;
+  document.getElementById('stat-low').textContent = `${low} (${Math.round(low/total*100)}%)`;
+  document.getElementById('stat-mid').textContent = `${mid} (${Math.round(mid/total*100)}%)`;
+  document.getElementById('stat-high').textContent = `${high} (${Math.round(high/total*100)}%)`;
+  document.getElementById('stat-vac').textContent = vac;
+  document.getElementById('stat-rent').textContent = `$${Math.round(totalRent/rentCount)}`;
+  document.getElementById('stat-disp').textContent = totalDisplaced;
+  // Segregation: measure clustering
+  let seg = 0, count = 0;
+  for (let r = 0; r < GRID_SIZE; r++) for (let c = 0; c < GRID_SIZE; c++) {
+    const d = grid[r][c];
+    if (d.income === INCOME.NONE) continue;
+    const ns = getNeighbors(r, c).filter(n => n.income !== INCOME.NONE);
+    if (ns.length === 0) continue;
+    const same = ns.filter(n => n.income === d.income).length;
+    seg += same / ns.length; count++;
+  }
+  document.getElementById('stat-seg').textContent = count ? (seg / count).toFixed(2) : '-';
+  document.getElementById('year-display').textContent = year;
+}
+
+function addEvent(msg) {
+  const log = document.getElementById('event-log');
+  const div = document.createElement('div');
+  div.textContent = msg;
+  log.prepend(div);
+  while (log.children.length > 20) log.removeChild(log.lastChild);
+}
+
+['investment','transit','rentcontrol','zoning'].forEach(id => {
+  document.getElementById(id).addEventListener('input', function() {
+    const labels = {investment:'inv-val',transit:'transit-val',rentcontrol:'rent-val',zoning:'zone-val'};
+    document.getElementById(labels[id]).textContent = this.value + '%';
+  });
+});
+
+document.getElementById('btn-step').addEventListener('click', step);
+document.getElementById('btn-auto').addEventListener('click', function() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; this.textContent = 'Auto Run'; this.className = this.className.replace('red','blue'); }
+  else { autoTimer = setInterval(step, 400); this.textContent = 'Stop'; this.classList.remove('bg-blue-600','hover:bg-blue-500'); this.classList.add('bg-red-600','hover:bg-red-500'); }
+});
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; document.getElementById('btn-auto').textContent = 'Auto Run'; }
+  initGrid();
+});
+
+initGrid();
+</script>
+</body>
+</html>
